@@ -40,7 +40,7 @@ for column in outputData.columns:
 outputData = outputData[outputData['職務列等/職系'].str.contains('委任')]
 
 # 過濾掉不符合的職系(負面表列)
-outputData = outputData[~outputData['職務列等/職系'].str.contains('土木工程職系|經建行政')]
+outputData = outputData[~outputData['職務列等/職系'].str.contains('土木工程|經建行政|資訊處理')]
 
 # 重新排序編號
 outputData = outputData.reset_index(drop=True)
