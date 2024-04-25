@@ -19,6 +19,26 @@ jobTypeFilterList = [
 # 限制資格字詞
 jobRestrictFilterList = ['限制轉調', '限制調任', '身心障礙']
 
+# Headers設定
+headers = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Host": "web3.dgpa.gov.tw",
+    "Pragma": "no-cache",
+    "Referer": "https://www.google.com/",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"'
+}
 
 ################### 台南市政府徵才專區爬蟲 ###################
 # 台南市政府徵才專區
@@ -98,7 +118,7 @@ outputData = outputData[[
 ################### 事求人機關徵才系統 ###################
 # 目標網址
 url = 'https://web3.dgpa.gov.tw/WANT03FRONT/AP/WANTF00003.aspx?GETJOB=Y'
-response = requests.get(url)
+response = requests.get(url, headers=headers)
 soup = BeautifulSoup(response.text, 'xml')
 
 # 整理資料
