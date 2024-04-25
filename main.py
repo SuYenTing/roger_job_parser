@@ -10,7 +10,11 @@ import re
 
 ################### 參數設定 ###################
 # 職缺類別過濾名單
-jobTypeFilterList = ['土木工程', '經建行政', '資訊處理', '財稅金融', '建築工程', '衛生行政', '電機工程', '衛生技術']
+jobTypeFilterList = [
+    '土木工程', '經建行政', '資訊處理', '財稅金融', 
+    '建築工程', '衛生行政', '電機工程', '衛生技術',
+    '地政',
+    ]
 
 # 限制資格字詞
 jobRestrictFilterList = ['限制轉調', '限制調任', '身心障礙']
@@ -85,106 +89,77 @@ outputData = outputData.reset_index(drop=True)
 # 加入資料來源
 outputData.insert(0, '職缺來源', '台南市政府')
 
+# 篩選所需欄位
+outputData = outputData[[
+    '職缺來源', '徵才機關', '登載日期', '人員類別', '職稱', 
+    '職務列等/職系', '職缺連結']]
+
 
 ################### 事求人機關徵才系統 ###################
 # 目標網址
-url = 'https://web3.dgpa.gov.tw/want03front/AP/WANTF00001.ASPX'
-
-# 查詢期間參數
-edDateTime = datetime.now().strftime('%Y/%m/%d')
-stDateTime = (datetime.now() - timedelta(days=7)).strftime('%Y/%m/%d')
-edDateTime = str(int(edDateTime[0:4])-1911)+edDateTime[4:11]
-stDateTime = str(int(stDateTime[0:4])-1911)+stDateTime[4:11]
-
-# 發送 POST 請求
+url = 'https://web3.dgpa.gov.tw/WANT03FRONT/AP/WANTF00003.aspx?GETJOB=Y'
 response = requests.get(url)
-soup = BeautifulSoup(response.text, 'html.parser')
+soup = BeautifulSoup(response.text, 'xml')
 
-# 取得viewstate參數
-viewstate = soup.find('input', {'name': '__VIEWSTATE'}).get('value')
+# 整理資料
+iOutputData = pd.DataFrame(
+    data={
+        '職缺地點': soup.find_all('WORK_PLACE_TYPE'),
+        '徵才機關': soup.find_all('ORG_NAME'),
+        '登載起始日': soup.find_all('DATE_FROM'),
+        '登載結束日': soup.find_all('DATE_TO'),
+        '人員類別': soup.find_all('PERSON_KIND'),
+        '職稱': soup.find_all('TITLE'),
+        '職務列等': soup.find_all('RANK'),
+        '職務職系': soup.find_all('SYSNAM'),
+        '資格條件': soup.find_all('WORK_QUALITY'),
+        '工作項目': soup.find_all('WORK_ITEM'),
+        '聯絡方式': soup.find_all('CONTACT_METHOD'),
+        '職缺連結': soup.find_all('VIEW_URL'),
+    }   
+)
+iOutputData = iOutputData.explode(list(iOutputData.columns))
 
-# POST 請求參數
-payload = {
-    '__EVENTTARGET': '',
-    '__EVENTARGUMENT': '',
-    '__LASTFOCUS': '',
-    '__VIEWSTATE': viewstate,
-    '__VIEWSTATEGENERATOR': 'B32C3998',
-    '__VIEWSTATEENCRYPTED': '',
-    'ctl00$ContentPlaceHolder1$drpPERSON_KIND': '',
-    'ctl00$ContentPlaceHolder1$drpWORK_PLACE': '72',
-    'ctl00$ContentPlaceHolder1$txtTITLE': '',
-    'ctl00$ContentPlaceHolder1$txtSYSNAM': '',
-    'ctl00$ContentPlaceHolder1$txbORG_NAME': '',
-    'ctl00$ContentPlaceHolder1$DATE_FROM': stDateTime,
-    'ctl00$ContentPlaceHolder1$DATE_TO': edDateTime,
-    'ctl00$ContentPlaceHolder1$chkTYPE3': 'on',
-    'ctl00$ContentPlaceHolder1$btnQUERY': '查詢',
-    'ctl00$ContentPlaceHolder1$ddl_Sort': 'DATE_FROM_DESC',
-    'ctl00$ContentPlaceHolder1$ddlCOUNT': '1',
-    'ctl00$ContentPlaceHolder1$txtPAGE_SIZE': '99',
-}
+# 篩選地區
+iOutputData = iOutputData[iOutputData['職缺地點'].str.contains('臺南市', na=False)]
 
-# 發送 POST 請求
-response = requests.post(url, data=payload)
-soup = BeautifulSoup(response.text, 'html.parser')
+# 篩選職務
+iOutputData = iOutputData[iOutputData['職務列等'].str.contains('委任', na=False)]
+iOutputData = iOutputData[iOutputData['職務列等'] != '委任第1職等待遇至委任第3職等待遇']
+iOutputData = iOutputData[~iOutputData['職務職系'].str.contains('|'.join(jobTypeFilterList))]
+iOutputData = iOutputData[~iOutputData['資格條件'].str.contains('|'.join(jobRestrictFilterList))]
+iOutputData = iOutputData[~iOutputData['工作項目'].str.contains('|'.join(jobRestrictFilterList))]
+iOutputData = iOutputData[~iOutputData['聯絡方式'].str.contains('|'.join(jobRestrictFilterList))]
 
-# 取得職缺資訊
-links = soup.findAll('div', id=re.compile('ctl00_ContentPlaceHolder1_gvMAIN*'))
-links = [elem.get('onclick').split("'")[1] for elem in links]
-links = ['https://web3.dgpa.gov.tw/want03front/AP/'+ elem for elem in links]
+# 整理職缺地點
+iOutputData['職缺地點'] = iOutputData['職缺地點'].apply(lambda x: ','.join(re.findall(r'\d+-(.*?)(?=,|\Z)', x)))
 
+# 整理日期
+iOutputData['登載起始日'] = (iOutputData['登載起始日'].astype('int')+19110000).astype('str')
+iOutputData['登載起始日'] = iOutputData['登載起始日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
+iOutputData['登載結束日'] = (iOutputData['登載結束日'].astype('int')+19110000).astype('str')
+iOutputData['登載結束日'] = iOutputData['登載結束日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
+iOutputData['登載日期'] = iOutputData['登載起始日'] + ' ~ ' + iOutputData['登載結束日']
 
-# 迴圈連結
-for link in links:
+# 整理職務列等/職系
+iOutputData['職務列等/職系'] = iOutputData['職務列等'] + ' / ' + iOutputData['職務職系']
 
-    time.sleep(1)
+# 加入資料來源
+iOutputData.insert(0, '職缺來源', '事求人')
 
-    # 發送Get請求
-    response = requests.get(link)
-    soup = BeautifulSoup(response.text, 'html.parser')
+# 篩選所需欄位
+iOutputData = iOutputData[[
+    '職缺來源', '徵才機關', '登載日期', '人員類別', '職稱', 
+    '職務列等/職系', '職缺連結']]
 
-    # 取得相關資訊
-    jobInfo = [elem.get_text() for elem in soup.find_all(class_='job_detail_item_content')]
-
-    # 過濾不符合職缺
-    checks = [True if jobType in jobInfo[3] else False for jobType in jobTypeFilterList]
-    if any(checks):
-        continue
-
-    # 過濾限制資格字詞
-    allJobInfo = ' '.join(jobInfo)
-    checks = [True if jobRestrict in allJobInfo else False for jobRestrict in jobRestrictFilterList]
-    if any(checks):
-        continue
-
-    # 取得職稱
-    iOutputData = pd.DataFrame(
-        data={
-            '職缺來源': '事求人',
-            '徵才機關': soup.find(class_='job_detail_item_content').get_text(),
-            '登載日期': jobInfo[7],
-            '人員類別': jobInfo[1],
-            '職稱': jobInfo[0], 
-            '職務列等/職系': jobInfo[2] + ' / ' + jobInfo[3], 
-            '名額': jobInfo[4], 
-            '工作地點': jobInfo[6], 
-            '職缺連結': link,
-            '是否限制資格': False,
-        }, 
-        index=[0]
-    )
-    
-    # 合併資料
-    outputData = pd.concat([outputData, iOutputData])
-    
-# 重設Index
-outputData = outputData.reset_index(drop=True)
+# 合併資料
+outputData = pd.concat([outputData, iOutputData])
 
 
 ################### 發送Line ###################
 # 讀取Line Tokens
 lineToken = os.environ['LINE_TOKEN']
+
 
 # Line Notify設定
 url = 'https://notify-api.line.me/api/notify'
