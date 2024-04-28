@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import time
 import re
+import json
 
 
 ################### 參數設定 ###################
@@ -19,26 +20,6 @@ jobTypeFilterList = [
 # 限制資格字詞
 jobRestrictFilterList = ['限制轉調', '限制調任', '身心障礙']
 
-# Headers設定
-headers = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "Host": "web3.dgpa.gov.tw",
-    "Pragma": "no-cache",
-    "Referer": "https://www.google.com/",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "cross-site",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"'
-}
 
 ################### 台南市政府徵才專區爬蟲 ###################
 # 台南市政府徵才專區
@@ -115,65 +96,128 @@ outputData = outputData[[
     '職務列等/職系', '職缺連結']]
 
 
-################### 事求人機關徵才系統 ###################
-# 目標網址
-url = 'https://web3.dgpa.gov.tw/WANT03FRONT/AP/WANTF00003.aspx?GETJOB=Y'
-response = requests.get(url, headers=headers)
-soup = BeautifulSoup(response.text, 'xml')
+# ################### 事求人機關徵才系統 ###################
+# # 目標網址
+# url = 'https://web3.dgpa.gov.tw/WANT03FRONT/AP/WANTF00003.aspx?GETJOB=Y'
+# response = requests.get(url)
+# soup = BeautifulSoup(response.text, 'xml')
+
+# # 整理資料
+# iOutputData = pd.DataFrame(
+#     data={
+#         '職缺地點': soup.find_all('WORK_PLACE_TYPE'),
+#         '徵才機關': soup.find_all('ORG_NAME'),
+#         '登載起始日': soup.find_all('DATE_FROM'),
+#         '登載結束日': soup.find_all('DATE_TO'),
+#         '人員類別': soup.find_all('PERSON_KIND'),
+#         '職稱': soup.find_all('TITLE'),
+#         '職務列等': soup.find_all('RANK'),
+#         '職務職系': soup.find_all('SYSNAM'),
+#         '資格條件': soup.find_all('WORK_QUALITY'),
+#         '工作項目': soup.find_all('WORK_ITEM'),
+#         '聯絡方式': soup.find_all('CONTACT_METHOD'),
+#         '職缺連結': soup.find_all('VIEW_URL'),
+#     }   
+# )
+# iOutputData = iOutputData.explode(list(iOutputData.columns))
+
+# # 篩選地區
+# iOutputData = iOutputData[iOutputData['職缺地點'].str.contains('臺南市', na=False)]
+
+# # 篩選職務
+# iOutputData = iOutputData[iOutputData['職務列等'].str.contains('委任', na=False)]
+# iOutputData = iOutputData[iOutputData['職務列等'] != '委任第1職等待遇至委任第3職等待遇']
+# iOutputData = iOutputData[~iOutputData['職務職系'].str.contains('|'.join(jobTypeFilterList))]
+# iOutputData = iOutputData[~iOutputData['資格條件'].str.contains('|'.join(jobRestrictFilterList))]
+# iOutputData = iOutputData[~iOutputData['工作項目'].str.contains('|'.join(jobRestrictFilterList))]
+# iOutputData = iOutputData[~iOutputData['聯絡方式'].str.contains('|'.join(jobRestrictFilterList))]
+
+# # 整理職缺地點
+# iOutputData['職缺地點'] = iOutputData['職缺地點'].apply(lambda x: ','.join(re.findall(r'\d+-(.*?)(?=,|\Z)', x)))
+
+# # 整理日期
+# iOutputData['登載起始日'] = (iOutputData['登載起始日'].astype('int')+19110000).astype('str')
+# iOutputData['登載起始日'] = iOutputData['登載起始日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
+# iOutputData['登載結束日'] = (iOutputData['登載結束日'].astype('int')+19110000).astype('str')
+# iOutputData['登載結束日'] = iOutputData['登載結束日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
+# iOutputData['登載日期'] = iOutputData['登載起始日'] + ' ~ ' + iOutputData['登載結束日']
+
+# # 整理職務列等/職系
+# iOutputData['職務列等/職系'] = iOutputData['職務列等'] + ' / ' + iOutputData['職務職系']
+
+# # 加入資料來源
+# iOutputData.insert(0, '職缺來源', '事求人')
+
+# # 篩選所需欄位
+# iOutputData = iOutputData[[
+#     '職缺來源', '徵才機關', '登載日期', '人員類別', '職稱', 
+#     '職務列等/職系', '職缺連結']]
+
+# # 合併資料
+# outputData = pd.concat([outputData, iOutputData])
+
+
+################### 人事行政總處事求人開放資料版 ###################
+# 取得資料
+url = 'https://dgpajobs.net/'
+response = requests.get(url)
+soup = BeautifulSoup(response.text, 'html.parser')
+data = soup.find_all('script')[4].text
+data = data.split('var ')[1]
+data = data.strip()
+data = data.replace('jobdata = ', '')
+data = json.loads(data)
 
 # 整理資料
-iOutputData = pd.DataFrame(
+data = pd.DataFrame(
     data={
-        '職缺地點': soup.find_all('WORK_PLACE_TYPE'),
-        '徵才機關': soup.find_all('ORG_NAME'),
-        '登載起始日': soup.find_all('DATE_FROM'),
-        '登載結束日': soup.find_all('DATE_TO'),
-        '人員類別': soup.find_all('PERSON_KIND'),
-        '職稱': soup.find_all('TITLE'),
-        '職務列等': soup.find_all('RANK'),
-        '職務職系': soup.find_all('SYSNAM'),
-        '資格條件': soup.find_all('WORK_QUALITY'),
-        '工作項目': soup.find_all('WORK_ITEM'),
-        '聯絡方式': soup.find_all('CONTACT_METHOD'),
-        '職缺連結': soup.find_all('VIEW_URL'),
+        '職缺地點': [elem['fields']['work_places_id'] for elem in data],
+        '徵才機關': [elem['fields']['org_name'] for elem in data],
+        '登載起始日': [elem['fields']['date_from'] for elem in data],
+        '登載結束日': [elem['fields']['date_to'] for elem in data],
+        '人員類別': [elem['fields']['person_kind'] for elem in data],
+        '職稱': [elem['fields']['title'] for elem in data],
+        '職務列等起始': [elem['fields']['rank_from'] for elem in data],
+        '職務列等結束': [elem['fields']['rank_to'] for elem in data],
+        '職務列等': [elem['fields']['job_type'] for elem in data],
+        '職務職系': [elem['fields']['sysnam'] for elem in data],
+        '資格條件': [elem['fields']['work_quality'] for elem in data],
+        '工作項目': [elem['fields']['work_item'] for elem in data],
+        '聯絡方式': [elem['fields']['contact'] for elem in data],
+        '職缺連結': [elem['fields']['view_url'] for elem in data],
     }   
 )
-iOutputData = iOutputData.explode(list(iOutputData.columns))
 
 # 篩選地區
-iOutputData = iOutputData[iOutputData['職缺地點'].str.contains('臺南市', na=False)]
+data = data[data['職缺地點'].str.contains('72', na=False)]
+
+# 整理登載日期
+data['登載日期'] = data['登載起始日'] + ' ~ ' + data['登載結束日']
 
 # 篩選職務
-iOutputData = iOutputData[iOutputData['職務列等'].str.contains('委任', na=False)]
-iOutputData = iOutputData[iOutputData['職務列等'] != '委任第1職等待遇至委任第3職等待遇']
-iOutputData = iOutputData[~iOutputData['職務職系'].str.contains('|'.join(jobTypeFilterList))]
-iOutputData = iOutputData[~iOutputData['資格條件'].str.contains('|'.join(jobRestrictFilterList))]
-iOutputData = iOutputData[~iOutputData['工作項目'].str.contains('|'.join(jobRestrictFilterList))]
-iOutputData = iOutputData[~iOutputData['聯絡方式'].str.contains('|'.join(jobRestrictFilterList))]
-
-# 整理職缺地點
-iOutputData['職缺地點'] = iOutputData['職缺地點'].apply(lambda x: ','.join(re.findall(r'\d+-(.*?)(?=,|\Z)', x)))
-
-# 整理日期
-iOutputData['登載起始日'] = (iOutputData['登載起始日'].astype('int')+19110000).astype('str')
-iOutputData['登載起始日'] = iOutputData['登載起始日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
-iOutputData['登載結束日'] = (iOutputData['登載結束日'].astype('int')+19110000).astype('str')
-iOutputData['登載結束日'] = iOutputData['登載結束日'].apply(lambda x: x[:4] + '/' + x[4:6] + '/' + x[6:])
-iOutputData['登載日期'] = iOutputData['登載起始日'] + ' ~ ' + iOutputData['登載結束日']
+data = data[data['職務列等'].str.contains('委任', na=False)]
+data = data[data['職務列等起始'] >= 3]
+data = data[~data['職務職系'].str.contains('|'.join(jobTypeFilterList))]
+data = data[~data['資格條件'].str.contains('|'.join(jobRestrictFilterList))]
+data = data[~data['工作項目'].str.contains('|'.join(jobRestrictFilterList))]
+data = data[~data['聯絡方式'].str.contains('|'.join(jobRestrictFilterList))]
 
 # 整理職務列等/職系
-iOutputData['職務列等/職系'] = iOutputData['職務列等'] + ' / ' + iOutputData['職務職系']
+data['職務列等/職系'] = data['職務列等起始'].astype('str') +\
+      '-' + data['職務列等結束'].astype('str') +\
+          ' 職等 / ' + data['職務職系']
 
 # 加入資料來源
-iOutputData.insert(0, '職缺來源', '事求人')
+data.insert(0, '職缺來源', '事求人開放資料版')
 
 # 篩選所需欄位
-iOutputData = iOutputData[[
+data = data[[
     '職缺來源', '徵才機關', '登載日期', '人員類別', '職稱', 
     '職務列等/職系', '職缺連結']]
 
 # 合併資料
-outputData = pd.concat([outputData, iOutputData])
+outputData = pd.concat([outputData, data])
+outputData = outputData.reset_index(drop=True)
 
 
 ################### 發送Line ###################
