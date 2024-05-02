@@ -162,7 +162,7 @@ outputData = outputData[[
 url = 'https://dgpajobs.net/'
 response = requests.get(url)
 soup = BeautifulSoup(response.text, 'html.parser')
-data = soup.find_all('script')[4].text
+data = soup.find_all('script')[5].text
 data = data.split('var ')[1]
 data = data.strip()
 data = data.replace('jobdata = ', '')
