@@ -171,7 +171,7 @@ data = json.loads(data)
 # 整理資料
 data = pd.DataFrame(
     data={
-        '職缺地點': [elem['fields']['work_places_id'] for elem in data],
+        '職缺地點': [elem['fields']['work_places_id'].replace(r'[', '').replace(r']', '') for elem in data],
         '徵才機關': [elem['fields']['org_name'] for elem in data],
         '登載起始日': [elem['fields']['date_from'] for elem in data],
         '登載結束日': [elem['fields']['date_to'] for elem in data],
@@ -189,7 +189,9 @@ data = pd.DataFrame(
 )
 
 # 篩選地區
-data = data[data['職缺地點'].str.contains('72', na=False)]
+# 72: 台南市
+# 82: 高雄市
+data = data[data['職缺地點'].str.contains('72|82', na=False)]
 
 # 整理登載日期
 data['登載日期'] = data['登載起始日'] + ' ~ ' + data['登載結束日']
