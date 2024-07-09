@@ -19,7 +19,7 @@ jobTypeFilterList = [
 
 # 限制資格字詞
 # jobRestrictFilterList = ['限制轉調', '限制調任', '身心障礙']
-jobRestrictFilterList = []
+jobRestrictFilterList = ['身心障礙']
 
 
 ################### 台南市政府徵才專區爬蟲 ###################
